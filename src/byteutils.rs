@@ -1,6 +1,7 @@
 /// Utilities for correct and fast u64 read/writes from Vec/[u8], including when # bytes < 8
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use std::convert::TryInto;
 
 /// Fast write of u64.  numbytes least significant bytes are written.  May overwrite, but it's fine
 /// because this is a Vec which can be extended.  Vec.len() is always advanced numbytes.
@@ -19,17 +20,15 @@ pub fn direct_write_uint_le(out_buffer: &mut Vec<u8>, value: u64, numbytes: usiz
 /// Will never read beyond end of inbuf.
 #[inline(always)]
 pub fn direct_read_uint_le(inbuf: &[u8], index: u32) -> u64 {
-    if ((index as usize) + 8) <= inbuf.len() {
-        unsafe {
-            let ptr = inbuf.as_ptr().offset(index as isize) as *const u64;
-            u64::from_le(std::ptr::read_unaligned(ptr))
-        }
+    let index = index as usize;
+    if (index + 8) <= inbuf.len() {
+        u64::from_le_bytes(inbuf[index..(index + 8)].try_into().unwrap())
     } else {
         // Less than 8 bytes left.  Use Byteorder implementation which can read limited # of bytes.
         // This ensures we don't read from a space we are not allowed to.
         let mut cursor = std::io::Cursor::new(inbuf);
         cursor.set_position(index as u64);
-        cursor.read_uint::<LittleEndian>(inbuf.len() - index as usize).unwrap()
+        cursor.read_uint::<LittleEndian>(inbuf.len() - index).unwrap()
     }
 }
 
